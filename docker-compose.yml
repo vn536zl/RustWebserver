@@ -1,0 +1,9 @@
+version: "0.1.0"
+services:
+  web:
+    build: .
+    image: haywardj/http_server
+    ports:
+      - "4200:8000"
+    volumes:
+      - ./src/html:/src/html

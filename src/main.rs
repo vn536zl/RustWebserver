@@ -4,25 +4,29 @@ use std::{
 };
 use async_std::{
     task,
+    task::spawn,
     prelude::*,
     net::{TcpListener, TcpStream}
 };
+use futures::StreamExt;
 
 #[async_std::main]
 async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:7878").await.unwrap();
 
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-
-        handle_connection(stream).await;
-    }
+    listener
+        .incoming()
+        .for_each_concurrent(/* limit */ None, |stream| async move {
+            let stream = stream.unwrap();
+            spawn(handle_connection(stream));
+        })
+        .await
 }
 
 
 async fn handle_connection(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    stream.read(&mut buffer).await.unwrap();
 
     let get = b"GET / HTTP/1.1";
     let sleep = b"GET /sleep HTTP/1.1";

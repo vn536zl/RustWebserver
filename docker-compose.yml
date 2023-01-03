@@ -4,4 +4,4 @@ services:
     build: .
     image: haywardj/http_server
     ports:
-      - "172.0.0.1:4200:8000"
+      - "4200:8000"

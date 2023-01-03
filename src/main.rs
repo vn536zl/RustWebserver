@@ -1,43 +1,52 @@
-use async_std::{
-    task::spawn,
-    prelude::*,
-    net::{TcpListener, TcpStream}
-};
-use futures::StreamExt;
+use std::collections::HashMap;
+use std::convert::Infallible;
+use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex};
+use warp::{ws::Message, Filter, Rejection};
 
-#[async_std::main]
-async fn main() {
-    let listener = TcpListener::bind("0.0.0.0:8000").await.unwrap();
+mod handler;
+mod ws;
 
-    listener
-        .incoming()
-        .for_each_concurrent(/* limit */ None, |stream| async move {
-            let stream = stream.unwrap();
-            spawn(handle_connection(stream));
-        })
-        .await
+type Result<T> = std::result::Result<T, Rejection>;
+type Clients = Arc<Mutex<HashMap<String, Client>>>;
+
+#[derive(Debug, Clone)]
+pub struct Client {
+    pub topics: Vec<String>,
+    pub sender: Option<mpsc::UnboundedSender<std::result::Result<Message, warp::Error>>>,
 }
 
+#[tokio::main]
+async fn main() {
+    let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
 
-async fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = vec![0; 1024];
-    stream.read(&mut buffer).await.unwrap();
+    let health_route = warp::path!("health").and_then(handler::health_handler);
 
-    let get = b"GET / HTTP/1.1";
+    let register = warp::path("register");
+    let register_routes = register
+        .and(warp::get())
+        .and(with_clients(clients.clone()))
+        .and_then(handler::register_handler)
+        .or(register
+            .and(warp::delete())
+            .and(warp::path::param())
+            .and(with_clients(clients.clone()))
+            .and_then(handler::unregister_handler));
 
-    let status_line = if buffer.starts_with(get) {
-        "HTTP/1.1 200 OK"
-    } else {
-        "HTTP/1.1 404 NOT FOUND"
-    };
+    let ws_route = warp::path("ws")
+        .and(warp::ws())
+        .and(warp::path::param())
+        .and(with_clients(clients.clone()))
+        .and_then(handler::ws_handler);
 
-    let response = status_line.to_owned() + "\r\n\r\n";
+    let routes = health_route
+        .or(register_routes)
+        .or(ws_route)
+        .with(warp::cors().allow_any_origin());
 
-    buffer.retain(|&i| i != 0);
+    warp::serve(routes).run(([0, 0, 0, 0], 8000)).await;
+}
 
-    let http_request = String::from_utf8(buffer).unwrap();
-
-    println!("Request: {}", http_request);
-    stream.write_all(response.as_bytes()).await.unwrap();
-    stream.flush().await.unwrap();
+fn with_clients(clients: Clients) -> impl Filter<Extract = (Clients,), Error = Infallible> + Clone {
+    warp::any().map(move || clients.clone())
 }

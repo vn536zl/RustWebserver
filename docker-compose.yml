@@ -4,6 +4,4 @@ services:
     build: .
     image: haywardj/http_server
     ports:
-      - "4200:8000"
-    volumes:
-      - ./src/html:/src/html
+      - "172.0.0.1:4200:8000"

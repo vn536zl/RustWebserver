@@ -1,21 +1,19 @@
-use crate::{Client, Clients};
+use crate::{Client, Clients, Board};
 use futures::{FutureExt, StreamExt};
 use serde::Deserialize;
 use serde_json::from_str;
+use std::cell::RefCell;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
 
-#[derive(Deserialize, Debug)]
-pub struct TopicsRequest {
-    topics: Vec<String>,
+#[derive(Deserialize, Copy, Clone)]
+pub struct SentBoard {
+    board: Board,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct SentMessage {
-    topic: String,
-    message: String,
-}
+
+thread_local! {static GAME_BOARD: RefCell<Board> = RefCell::new([[0; 20]; 10])}
 
 pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut client: Client) {
     let (client_ws_sender, mut client_ws_rcv) = ws.split();
@@ -41,18 +39,26 @@ pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut 
                 break;
             }
         };
-        client_msg(&id, msg, &clients).await;
+        let board = client_msg(&id, msg, &clients).await;
+        GAME_BOARD.with(|val| {
+            *val.borrow_mut() = board;
+        })
     }
 
     clients.lock().await.remove(&id);
     println!("{} disconnected", id);
 }
 
-async fn client_msg(id: &str, msg: Message, clients: &Clients) {
+async fn client_msg(id: &str, msg: Message, clients: &Clients) -> Board {
     println!("Received message from {}; {:?}", id, msg);
+    let mut board: Board = [[0; 20]; 10];
+    GAME_BOARD.with(|static_board| {
+        board = *static_board.borrow();
+    });
+
     let message = match msg.to_str() {
         Ok(v) => v,
-        Err(_) => return,
+        Err(_) => return board,
     };
 
     if message == "ping" || message == "ping\n" {
@@ -63,30 +69,36 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients) {
                     let _ = sender.send(Ok(Message::text("Pong")));
                 }
             });
-        return;
+        return board;
     }
 
+    if message == "get_board" || message == "get_board\n" {
+        send_board(id, clients).await;
+    }
 
-    let topics_req: TopicsRequest = match from_str(&message) {
-        Ok(v) => v,
-        Err(_) => {
-            let json_msg: SentMessage = from_str(message).unwrap();
-            clients.lock().await.iter_mut()
-                .filter(|(_, client)| client.topics.contains(&json_msg.topic))
-                .for_each(|(_, client)| {
-                    if let Some(sender) = &client.sender {
-                        let _ = sender.send(Ok(Message::text(&json_msg.message)));
-                    }
-                });
-            return;
+    let sent_board: SentBoard = match from_str(&message) {
+        Ok(msg) => msg,
+        Err(e) => {
+            eprintln!("Error processing request: {}", e);
+            return board;
         }
     };
+    sent_board.board
 
-    let mut locked = clients.lock().await;
-    match locked.get_mut(id) {
-        Some(v) => {
-            v.topics = topics_req.topics;
-        },
-        None => return,
-    };
+}
+
+async fn send_board(id: &str, clients: &Clients) {
+    clients.lock().await
+        .iter_mut()
+        .filter(|(client_id, _)| client_id.to_string() == id.to_string())
+        .for_each(|(_, client)| {
+            if let Some(sender) = &client.sender {
+
+                GAME_BOARD.with(|board| {
+                    let board_text = format!("{:?}", *board.borrow());
+                    sender.send(Ok(Message::text(board_text))).expect("Error Sending Board");
+                    println!("Sent Board: {}", board_text);
+                }).expect("Error with Constant");
+            };
+        });
 }

@@ -35,7 +35,6 @@ async fn register_client(id: String, clients: Clients) {
     clients.lock().await.insert(
         id,
         Client {
-            topics: vec![String::from("cats")],
             sender: None,
         },
     );
@@ -48,6 +47,7 @@ pub async fn unregister_handler(id: String, clients: Clients) -> Result<impl Rep
 
 pub async fn ws_handler(ws: warp::ws::Ws, id: String, clients: Clients) -> Result<impl Reply> {
     let client = clients.lock().await.get(&id).cloned();
+
     match client {
         Some(c) => Ok(ws.on_upgrade(move |socket| ws::client_connection(socket, id, clients, c))),
         None => Err(warp::reject::not_found()),

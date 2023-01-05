@@ -1,7 +1,7 @@
 FROM rust:latest as builder
 
-RUN USER=root cargo new --bin http_server
-WORKDIR ./http_server
+RUN USER=root cargo new --bin game_server
+WORKDIR ./game_server
 
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
@@ -11,7 +11,7 @@ RUN rm src/*.rs
 
 COPY ./src ./src
 
-RUN rm ./target/release/deps/http_server*
+RUN rm ./target/release/deps/game_server*
 RUN cargo build --release
 
 FROM debian:buster-slim
@@ -28,7 +28,7 @@ ENV groupadd $APP_USER \
     && useradd -g $APP_USER $APP_USER \
     && mkdir -p ${APP}
 
-COPY --from=builder /http_server/target/release/http_server ${APP}/http_server
+COPY --from=builder /game_server/target/release/game_server ${APP}/game_server
 
 
 RUN chown -R $APP_USER:$APP_USER ${APP}
@@ -36,4 +36,4 @@ RUN chown -R $APP_USER:$APP_USER ${APP}
 USER $APP_USER
 WORKDIR ${APP}
 
-CMD ["./http_server"]
+CMD ["./game_server"]

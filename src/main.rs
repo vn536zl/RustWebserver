@@ -9,10 +9,10 @@ mod ws;
 
 type Result<T> = std::result::Result<T, Rejection>;
 type Clients = Arc<Mutex<HashMap<String, Client>>>;
+type Board = [[i32; 20]; 10];
 
 #[derive(Debug, Clone)]
 pub struct Client {
-    pub topics: Vec<String>,
     pub sender: Option<mpsc::UnboundedSender<std::result::Result<Message, warp::Error>>>,
 }
 

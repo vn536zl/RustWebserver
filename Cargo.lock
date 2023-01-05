@@ -173,6 +173,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "game_server"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "uuid",
+ "warp",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -272,19 +285,6 @@ dependencies = [
  "bytes",
  "http",
  "pin-project-lite",
-]
-
-[[package]]
-name = "http_server"
-version = "0.1.0"
-dependencies = [
- "futures",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "uuid",
- "warp",
 ]
 
 [[package]]
